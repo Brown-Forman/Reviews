@@ -1,0 +1,427 @@
+---
+title: "tripvisor"
+author: "Thi Allgood"
+date: "3/23/2020"
+output: html_document
+---
+
+```{r}
+library(rvest)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tm)
+library(scales)
+library(topicmodels)
+library(rvest)
+library(purrr)
+library(rvest)
+library(stringr)
+library(rvest)
+```
+```{r}
+func_content <- function(body,responded.yn){
+  content <- rep(NA,10)
+  content[1] = body[1]
+  a = 1
+  i = 1
+  for (i in 1:9){
+    if (responded.yn[i+1] == TRUE){
+      
+      content[i+1] = body[a+2]
+      a = a + 3
+    } else {
+      content[i+1] = body[a+1]
+      a = a + 1
+    }
+  }
+  return(content)
+}
+
+func_response <- function(body,responded.yn){
+  a=1
+  response = rep(NA,10)
+  for (i in 1:10){
+  if (responded.yn[i] == TRUE){
+    response[i] = body[a+1]
+    a = a + 2
+  } else {
+    a = a + 1
+  }
+  }
+  return(response)
+}
+```
+
+
+```{r}
+#parse html search result (here: restaurants in Cologne)
+page0_url<-read_html ("https://www.tripadvisor.com/Restaurants-g187371-Cologne_North_Rhine_Westphalia11.html")
+
+# find the the lnumber of the last page listed in the bottom of the main page
+npages<-page0_url%>% 
+        html_nodes(" .pageNum ") %>% 
+        html_attr(name="data-page-number") %>%
+        tail(.,1) %>%
+        as.numeric()
+
+Restaurant_Name<-vector(mode="character", length=30*npages)
+Restaurant_URL<-vector(mode="character", length=30*npages)
+
+offset=0 #offset of page url
+idx_s=0 #start index of the entries in the vectors
+
+for (i in 1:npages)
+{
+        #change page url in every iteration to go to the next page 
+        page_url<-paste("https://www.tripadvisor.com/Restaurants-g187371-oa",offset,
+                        "-Cologne_North_Rhine_Westphalia.html#EATERY_LIST_CONTENTS",sep="")
+        #parse HTML page
+        link<-read_html(page_url)
+        
+        #get restaurant names from this page
+        R_names<-link %>%
+                html_nodes("a._15_ydu6b") %>%
+                html_text() 
+        
+        #get the links of the restaurants in the page
+        R_url<-link %>% 
+                html_nodes(".shortSellDetails h3 a") %>% 
+                html_attr(name="href")
+
+        R_url<-paste("https://www.tripadvisor.com",R_url,sep="")
+        
+        #get the number of restaurants in the page
+        R_count<-length( R_names)
+        
+        Restaurant_Name[(idx_s+1):(idx_s+R_count)]<-R_names
+        Restaurant_URL[(idx_s+1):(idx_s+R_count)]<-R_url
+        
+        #increment the start index
+        idx_s=idx_s+length(R_names)
+        
+        #increment the offset to refer to the next page
+        offset<-offset+30      
+}
+
+#remove empty values
+Restaurant_Name<-Restaurant_Name [Restaurant_Name!=""]
+Restaurant_URL<-Restaurant_URL[Restaurant_URL!=""]
+
+#get the total number of restaurants
+len=length(Restaurant_Name)
+
+#create vectors to fill with the scarapped values 
+Reviews<-vector(mode="numeric", length=len)
+Stars<-vector(mode="numeric", length=len)
+Cuisine<-vector(mode="list", length=len)
+Photos<-vector(mode="numeric", length=len)
+NearBy<-vector(mode="list", length=len)
+NearByURL<-vector(mode="list", length=len)
+
+
+#loop (len) times
+for(i in 1:len)
+{
+        #read restaurant URL
+        rest_url<-Restaurant_URL[i]
+        #parse HTML page
+        rest_cont<-read_html(rest_url)
+
+        ####REVIEWS####
+        #get the html_nodes corresponding to the reviews
+        reviews_nodes<-rest_cont %>% 
+                html_nodes("#TABS_REVIEWS .tabs_pers_counts")
+        
+        #check if the html_nodes is not empty, get the html text and convert to numeric
+        Reviews[i]<- ifelse(length(reviews_nodes)!=0,
+                            reviews_nodes%>% 
+                                    html_text() %>%
+                                    gsub('[(/)]',"",.) %>%
+                                    as.numeric(),
+                         NA
+                 )
+
+        ####STARS####
+        #get the html_nodes corresponding to stars
+        stars_nodes<-rest_cont %>%
+                html_nodes(".rating_rr_fill")
+        
+        #check if the html_nodes is not empty, get the content and convert to numeric
+        Stars[i]<- ifelse(length(stars_nodes)!=0,
+                          stars_nodes %>% 
+                                  html_attr("content") %>%
+                                  as.numeric(),
+                          NA
+                          )
+
+        ####CUISINE####
+        #get the html_nodes corresponding to cuisine
+        cuisine_nodes<-rest_cont %>%
+                html_nodes("div.detail.separator a")
+        
+        ##check if the html_nodes is not empty, get the html text
+        if(length(cuisine_nodes)!=0) 
+        {
+                Cuisine[[i]]<- cuisine_nodes %>%
+                        html_text() %>%
+                        gsub('[\r\n\t]', '', .)
+        }
+        else
+        {
+                Cuisine[[i]] <-NA    
+        }
+        
+        ####PHOTOS####
+        #get the html_nodes corresponding to photos
+        photos_nodes<-rest_cont %>%
+                html_nodes("div.count")
+        
+        ##check if the html_nodes is not empty, get the content and convert to numeric
+        Photos[i]<-ifelse(length(photos_nodes)!=0,
+                          photos_nodes%>%
+                                  html_text()%>%
+                                  gsub('[(/)]',"",.) %>%
+                                  as.numeric(),
+                          0
+                          )
+        
+        
+        ####EARBY RESTAURANTS####
+        #getnearby url of rest and attractions
+        nearBy_url<-rest_cont %>%
+                html_nodes(".nameWrapper a ")%>%
+                html_attr(name="href")
+        
+        #get index of nearby rest
+        ix<-grep("Restaurant",nearBy_url)
+        
+        #get the names of the nearby restaurants
+        NearBy[[i]]<-rest_cont %>%
+                html_nodes(".nameWrapper")%>%
+                html_text() %>%
+                gsub('[\r\n\t]', '', .) %>%
+                .[ix]
+        
+        #get the URL of the nearby restaurants
+        NearByURL[[i]]<-paste("http://www.tripadvisor.com",nearBy_url[ix],sep="")
+}
+
+# dat<-cbind.data.frame(Restaurant_Name,Restaurant_URL,Reviews,Stars,Photos,Cuisine,NearBy,NearByURL,stringsAsFactors=F)
+# ff<-data.frame(as.matrix(cbind(Restaurant_Name,Restaurant_URL,Reviews,Stars,Photos,Cuisine,NearBy,NearByURL)))
+
+#create a data frame to from the vectors filled in the previous loop
+ff<-data.frame(Restaurant_Name,Restaurant_URL,Reviews,Stars,Photos,stringsAsFactors=F)
+
+#save in RDs file
+save(ff,file="Cologne_Rest.Rds")
+
+#Write data frame to a CSV file
+write.table(ff,file="Cologne_Rest_test2.csv",sep=",",row.names = F)
+```
+<a href="/Restaurant_Review-g187371-d695516-Reviews-Restaurant_Gaststaette_Bei_Oma_Kleinmann-Cologne_North_Rhine_Westphalia.html" class="_15_ydu6b" target="_self">1. Restaurant Gaststaette Bei Oma Kleinmann</a>
+
+<span class="reviewCount cx_brand_refresh_phase2">3,279 reviews</span>
+<a class="restaurants-detail-overview-cards-RatingsOverviewCard__ratingCount--DFxkG" href="#REVIEWS">3,279 reviews</a>
+
+<span class="noQuotes">Excellent</span>
+```{r}
+# Read the web page and get the number of reviews
+mussel.n.burger <- read_html("https://www.tripadvisor.com/Restaurant_Review-g39604-d9799396-Reviews-Mussel_Burger_Bar_Downtown-Louisville_Kentucky.html")
+
+# find the the lnumber of the last page listed in the bottom of the main page
+npages<-mussel.n.burger%>% 
+        html_nodes(" .pageNum ") %>% 
+        html_attr(name="data-page-number") %>%
+        tail(.,1) %>%
+        as.numeric()
+
+totalReviews <- mussel.n.burger %>%
+  html_nodes("a.restaurants-detail-overview-cards-RatingsOverviewCard__ratingCount--DFxkG") %>%
+  html_text()
+totalReviews <- strsplit(totalReviews, " ")[[1]][1]
+totalReviews <- as.numeric(gsub(",", "", totalReviews))
+totalReviews
+
+headline <- mussel.n.burger %>%
+  html_nodes("span.noQuotes") %>%
+  html_text()
+
+responded.yn <- mussel.n.burger %>%
+  html_nodes("div.header") %>%
+  html_text() 
+responded.yn <- grepl("responded to this", responded.yn)
+responded.yn <- responded.yn[1:10]
+responded.yn[is.na(responded.yn)] <- FALSE
+  
+
+body <- mussel.n.burger %>%
+  html_nodes("p.partial_entry") %>%
+  html_text()
+
+content <- func_content(body,responded.yn)
+
+response <- func_response(body,responded.yn)
+
+star <- mussel.n.burger %>%
+  html_nodes("span.ui_bubble_rating") %>%
+  html_attr("alt") 
+star <- star[!is.na(star)]
+star <- star[3:length(star)]
+star <- strsplit(star, " ")
+star <- as.numeric(lapply(star, `[[`, 1))
+
+n = 10
+for (i in 1:10){
+
+  n.character = as.character(n)
+  url = paste0("https://www.tripadvisor.com/Restaurant_Review-g39604-d9799396-Reviews",
+               '-or',n.character,"-Mussel_Burger_Bar_Downtown-Louisville_Kentucky.html")
+  reviews = read_html(url)
+  
+  headline.temp = reviews %>%
+    html_nodes("span.noQuotes") %>%
+    html_text()
+  headline = append(headline,headline.temp)
+  
+  # Owner responded yes or no
+  responded.yn.temp <- reviews %>%
+    html_nodes(".header") %>%
+    html_text()
+  responded.yn.temp <- grepl("responded to this", responded.yn.temp)
+  responded.yn.temp = responded.yn.temp[1:10]
+  responded.yn.temp[is.na(responded.yn.temp)] <- FALSE
+  
+  # body including reviews and response from owner, need to look at responded.yn.temp to distinguish between review and response
+  body.temp <- reviews %>%
+  html_nodes("p.partial_entry") %>%
+  html_text()
+
+  # Fill in content 
+  content.temp <- func_content(body.temp,responded.yn.temp)
+  content = append(content,content.temp)
+    
+  # Fill in response
+  response.temp <- func_response(body.temp,responded.yn.temp)
+  response <- append(response,response.temp)
+  
+  star.temp <- reviews %>%
+  html_nodes("span.ui_bubble_rating") %>%
+  html_attr("alt") 
+  star.temp <- star.temp[!is.na(star.temp)]
+  star.temp <- star.temp[3:length(star.temp)]
+  star.temp <- strsplit(star.temp, " ")
+  star.temp <- as.numeric(lapply(star.temp, `[[`, 1))
+  start <- append(star,star.temp)
+  n = n + 10
+  print(i)
+  }
+  
+
+```
+
+
+```{r}
+# Read the web page and get the number of reviews
+mussel.n.burger <- read_html("https://www.tripadvisor.com/Restaurant_Review-g39604-d9799396-Reviews-Mussel_Burger_Bar_Downtown-Louisville_Kentucky.html")
+
+# find the the lnumber of the last page listed in the bottom of the main page
+npages<-mussel.n.burger%>% 
+        html_nodes(" .pageNum ") %>% 
+        html_attr(name="data-page-number") %>%
+        tail(.,1) %>%
+        as.numeric()
+
+totalReviews <- mussel.n.burger %>%
+  html_nodes("a.restaurants-detail-overview-cards-RatingsOverviewCard__ratingCount--DFxkG") %>%
+  html_text()
+totalReviews <- strsplit(totalReviews, " ")[[1]][1]
+totalReviews <- as.numeric(gsub(",", "", totalReviews))
+totalReviews
+
+headline <- mussel.n.burger %>%
+  html_nodes("span.noQuotes") %>%
+  html_text()
+
+responded.yn <- mussel.n.burger %>%
+  html_nodes("div.header") %>%
+  html_text() 
+responded.yn <- grepl("responded to this", responded.yn)
+responded.yn <- responded.yn[1:10]
+responded.yn[is.na(responded.yn)] <- FALSE
+  
+
+body <- mussel.n.burger %>%
+  html_nodes("p.partial_entry") %>%
+  html_text()
+
+content <- func_content(body,responded.yn)
+
+response <- func_response(body,responded.yn)
+
+star <- mussel.n.burger %>%
+  html_nodes("span.ui_bubble_rating") %>%
+  html_attr("alt") 
+star <- star[!is.na(star)]
+star <- star[3:length(star)]
+star <- strsplit(star, " ")
+star <- as.numeric(lapply(star, `[[`, 1))
+
+n = 10
+for (i in 1:10){
+
+  n.character = as.character(n)
+  url = paste0("https://www.tripadvisor.com/Restaurant_Review-g39604-d9799396-Reviews",
+               '-or',n.character,"-Mussel_Burger_Bar_Downtown-Louisville_Kentucky.html")
+  reviews = read_html(url)
+  
+  headline.temp = reviews %>%
+    html_nodes("span.noQuotes") %>%
+    html_text()
+  headline = append(headline,headline.temp)
+  
+  # Owner responded yes or no
+  year <- c(as.character(2010:2019))
+  responded.yn.temp <- reviews %>%
+    html_nodes("div.mgrRspnInline") %>%
+    html_text()
+  responded.yn.temp <- strsplit(responded.yn.temp,"Responded ")
+  responded.yn.temp <- sapply(responded.yn.temp,function(x) x[2])
+  responded.yn.temp <- str_replace_all(responded.yn.temp,'20..',"qwertyuiop")
+  responded.yn.temp <- strsplit(responded.yn.temp,'qwertyuiop')
+  responded.yn.temp <- sapply(responded.yn.temp,function(x) x[2])
+  responded.yn.temp <- body.temp %in% responded.yn.temp 
+  
+  content <- func_content(body.temp,responded.yn.temp)
+
+    
+  }
+    
+  
+  # body including reviews and response from owner, need to look at responded.yn.temp to distinguish between review and response
+  body.temp <- reviews %>%
+  html_nodes(".entry .partial_entry") %>%
+  html_text()
+
+  # Fill in content 
+  content.temp <- func_content(body.temp,responded.yn.temp)
+  content = append(content,content.temp)
+    
+  # Fill in response
+  response.temp <- func_response(body.temp,responded.yn.temp)
+  response <- append(response,response.temp)
+  
+  star.temp <- reviews %>%
+  html_nodes("span.ui_bubble_rating") %>%
+  html_attr("alt") 
+  star.temp <- star.temp[!is.na(star.temp)]
+  star.temp <- star.temp[3:length(star.temp)]
+  star.temp <- strsplit(star.temp, " ")
+  star.temp <- as.numeric(lapply(star.temp, `[[`, 1))
+  start <- append(star,star.temp)
+  n = n + 10
+  print(i)
+  }
+  
+```
+
