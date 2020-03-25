@@ -106,7 +106,7 @@ star <- as.numeric(lapply(star, `[[`, 1))
 l_headline = length(headline)
 length_df1 = data.frame(l_headline)
 
-n = 470
+n = 10
 for (o in 1:(npages-1)){
   n.character = as.character(n)
   url = paste0("https://www.tripadvisor.com/Restaurant_Review-g39604-d9799396-Reviews",
@@ -154,10 +154,8 @@ for (o in 1:(npages-1)){
   print(o)
   l_headline = length(headline.temp)
   print(l_headline)
-  l_content = length(content.temp)
-  l_response = length(response.temp)
-  l_star = length(star.temp)
-  length_df.temp = data.frame(l_headline,l_content,l_response,l_star)
+  
+  length_df.temp = data.frame(l_headline)
   length_df1 = rbind(length_df1,length_df.temp)
 }
 
