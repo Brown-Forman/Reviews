@@ -299,7 +299,7 @@ write_csv(df,"mussel.n.burger.csv")
 ```
 
 ```{r}
-# word cloud
+# Function to get word cloud
 cloud <- function(string_content,filter_words){
   docs0 <- Corpus(VectorSource(string_content))
   inspect(docs0)
