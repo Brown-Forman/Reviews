@@ -59,14 +59,14 @@ func_body <- function(body,responded.yn){
 # function to get csv reivews from Tripdvisor
 tripadvisor <- function(url){
   # get the name of the restaurant
-  place <- read_html(url)
+  reviews <- read_html(url)
   split_url <- str_split(url,'Reviews')
   name <- split_url[[1]][2]
   name <- str_split(name, ".html")
   name <- name[[1]][1]
   
   # find the the lnumber of the last page listed in the bottom of the main page
-  npages <- place %>% 
+  npages <- reviews %>% 
           html_nodes(" .pageNum ") %>% 
           html_attr(name="data-page-number") %>%
           as.numeric() %>%
@@ -74,17 +74,17 @@ tripadvisor <- function(url){
     
   
   # Get headline of reviews
-  headline <- place %>%
+  headline <- reviews %>%
     html_nodes("span.noQuotes") %>%
     html_text()
   
   #get body of reviews, this include customer reviews and response from owner
-  body <- place %>%
+  body <- reviews %>%
     html_nodes("p.partial_entry") %>%
     html_text()
   
   # get a yes/no vector to see if an element in the body is a response (Yes), otherwise No
-  responded.yn <- place %>%
+  responded.yn <- reviews %>%
       html_nodes("div.mgrRspnInline") %>%
       html_text()
   responded.yn <-strsplit(responded.yn,'Responded ')
@@ -101,7 +101,7 @@ tripadvisor <- function(url){
   content <- df$content
   
   # get stars that customer give in the review
-  star <- place %>%
+  star <- reviews %>%
     html_nodes("span.ui_bubble_rating") %>%
     html_attr("alt") 
   star <- star[!is.na(star)]
@@ -121,20 +121,20 @@ tripadvisor <- function(url){
     url.temp2 <- split_url[[1]][2]
     url.temp = paste0(url.temp1,
                  '-or',n.character,url.temp2)
-    reviews = read_html(url.temp)
+    reviews.temp = read_html(url.temp)
     
-    headline.temp = reviews %>%
+    headline.temp = reviews.temp %>%
       html_nodes("span.noQuotes") %>%
       html_text()
     headline = append(headline,headline.temp)
     
     # body including reviews and response from owner, need to look at responded.yn.temp to distinguish between review and response
-    body.temp <- reviews %>%
+    body.temp <- reviews.temp %>%
     html_nodes(".entry .partial_entry") %>%
     html_text()
     
     # Owner responded yes or no
-    responded.yn.temp <- reviews %>%
+    responded.yn.temp <- reviews.temp %>%
       html_nodes("div.mgrRspnInline") %>%
       html_text()
     responded.yn.temp <- strsplit(responded.yn.temp,"Responded ")
@@ -152,7 +152,7 @@ tripadvisor <- function(url){
     response.temp = df.temp$response
     response = append(response,response.temp)
     
-    star.temp <- reviews %>%
+    star.temp <- reviews.temp %>%
       html_nodes("span.ui_bubble_rating") %>%
       html_attr("alt") 
     star.temp <- star.temp[!is.na(star.temp)]
