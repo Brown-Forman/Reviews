@@ -72,7 +72,6 @@ tripadvisor <- function(url){
           as.numeric() %>%
           max()
     
-  
   # Get headline of reviews
   headline <- reviews %>%
     html_nodes("span.noQuotes") %>%
@@ -230,3 +229,36 @@ filter_words <- c("the","and","bourbon")
 cloud(bourbon,filter_words)
 ```
 
+
+iterate throug all restaurants in New York
+```{r}
+city_url <- "https://www.tripadvisor.com/Restaurants-g60763-New_York_City_New_York.html"
+city <- read_html(city_url)
+
+link <- city %>%
+  html_nodes("a._15_ydu6b") %>%
+  html_attr("href")
+
+names <- list %>%
+  strsplit("-")
+names <- sapply(names,function(x) x[5])
+
+about.restaurant <- link <- city %>%
+  html_nodes("span._1p0FLy4t") %>%
+  html_text()
+
+reviews <- about.restaurant[str_detect(about.restaurant,"reviews")]
+
+price.range <- about.restaurant[str_detect(about.restaurant,"\\$")]
+price.range <- price.range %>%
+  str_replace("\\$\\$\\$\\$","high") %>%
+  str_replace("\\$\\$ - \\$\\$\\$","medium") %>%
+  str_replace("\\$","low")
+```
+
+<span class="_1p0FLy4t">$$$$</span>
+<span class="EHA742uW"><span class="_1p0FLy4t">$$$$</span></span>
+
+<div class="wQjYiB7z"><span><a href="/Restaurant_Review-g60763-d5937621-Reviews-Obao-New_York_City_New_York.html" class="_15_ydu6b" target="_blank">5. Obao</a></span></div>
+
+<a href="/Restaurant_Review-g60763-d3263717-Reviews-Obao-New_York_City_New_York.html" class="_15_ydu6b selectorgadget_selected" target="_blank">1. Obao</a>
