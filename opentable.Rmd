@@ -1,0 +1,102 @@
+---
+title: "Open table"
+author: "Thi Allgood"
+date: "3/23/2020"
+output: html_document
+---
+
+```{r}
+library(rvest)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(tm)
+library(scales)
+library(topicmodels)
+library(rvest)
+library(purrr)
+library(rvest)
+library(stringr)
+library(rvest)
+
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+```
+
+```{r}
+open.table <- function(url){
+  reviews <- read_html(url)
+  total_reviews <- reviews %>%
+  html_nodes('div.oc-reviews-c57b151d') %>%
+  html_text() %>%
+  str_split("What ")
+total_reviews <- total_reviews[[1]][2] %>%
+  str_split("People")
+total_reviews <- as.numeric(total_reviews[[1]][1])
+
+npages <- ceiling(total_reviews/40)
+
+#get body of reviews, this include customer reviews and response from owner
+content <- reviews %>%
+  html_nodes("p") %>%
+  html_text()
+lines.of.menu <- length(content) - 40
+content <- content[(length(content) - 39):length(content)]
+
+
+# get stars that customer give in the review
+star <- reviews %>%
+  html_nodes("span.oc-reviews-e3e61235") %>%
+  html_text()
+star <- t(matrix(as.numeric(star),nrow = 4,ncol=40))
+star.title <- reviews %>%
+  html_nodes("span.oc-reviews-ec85707c") %>%
+  html_text()
+star.title <- unique(star.title)
+colnames(star) <- star.title
+
+#iterate through all pages
+n = 2
+  for (o in 1:(npages-1)){
+    n.character = as.character(n)
+    url.temp1 <- url
+    url.temp2 <- paste0("&page=",n.character)
+    url.temp <- paste0(url.temp1,url.temp2)
+    
+    reviews.temp = read_html(url.temp)
+    
+    content.temp <- reviews.temp %>%
+              html_nodes("p") %>%
+              html_text()
+    a <- length(content.temp) - lines.of.menu - 1
+    content.temp <- content.temp[(length(content.temp) - a):length(content.temp)]
+    content <- append(content,content.temp)
+    
+    star.temp <- reviews.temp %>%
+            html_nodes("span.oc-reviews-e3e61235") %>%
+            html_text()
+    star.temp <- t(matrix(as.numeric(star.temp),nrow = 4,ncol=(length(content.temp))))
+    star.title.temp <- reviews.temp %>%
+            html_nodes("span.oc-reviews-ec85707c") %>%
+            html_text()
+    star.title.temp <- unique(star.title.temp)
+    colnames(star.temp) <- star.title.temp
+    star <- rbind(star,star.temp)
+    n=n+1
+    print(paste(o,'/',(npages-1)))
+  }
+ #return a dataframe of reviews
+  content = content[!is.na(content)]
+  total_reviews = length(content)
+  df <- data.frame(content) %>%
+    cbind(star)
+  return(df)
+}
+```
+
+```{r}
+df <- open.table("https://www.opentable.com/r/dish-on-market-louisville?corrid=4ecb1226-44fb-4031-bad2-f1bd432c3377")
+```
+
