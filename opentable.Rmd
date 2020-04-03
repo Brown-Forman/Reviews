@@ -26,11 +26,9 @@ library("RColorBrewer")
 ```
 
 ```{r}
-url <- "https://www.opentable.com/r/dish-on-market-louisville?corrid=4ecb1226-44fb-4031-bad2-f1bd432c3377"
-
-reviews <- read_html(url)
-
-total_reviews <- reviews %>%
+open.table <- function(url){
+  reviews <- read_html(url)
+  total_reviews <- reviews %>%
   html_nodes('div.oc-reviews-c57b151d') %>%
   html_text() %>%
   str_split("What ")
@@ -90,14 +88,15 @@ n = 2
     print(paste(o,'/',(npages-1)))
   }
  #return a dataframe of reviews
-content = content[!is.na(content)]
-total_reviews = length(content)
-df <- data.frame(content) %>%
-  cbind(star)
-
+  content = content[!is.na(content)]
+  total_reviews = length(content)
+  df <- data.frame(content) %>%
+    cbind(star)
+  return(df)
+}
 ```
 
-<span class="oc-reviews-e3e61235">3</span>
-https://www.opentable.com/r/dish-on-market-louisville?corrid=492baea8-7744-400b-be75-6f9b3b44febe&page=2
+```{r}
+df <- open.table("https://www.opentable.com/r/dish-on-market-louisville?corrid=4ecb1226-44fb-4031-bad2-f1bd432c3377")
+```
 
-https://www.opentable.com/r/dish-on-market-louisville?corrid=492baea8-7744-400b-be75-6f9b3b44febe
