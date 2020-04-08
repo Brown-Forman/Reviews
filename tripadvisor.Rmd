@@ -171,6 +171,8 @@ tripadvisor <- function(url){
   df = data.frame(headline,content,response,star)
   write_csv(df,paste0(name,'.csv'))
 }
+
+
 ```
 
 ```{r}
@@ -232,33 +234,102 @@ cloud(bourbon,filter_words)
 
 iterate throug all restaurants in New York
 ```{r}
-city_url <- "https://www.tripadvisor.com/Restaurants-g60763-New_York_City_New_York.html"
-city <- read_html(city_url)
+options(timeout= 4000000)
+a = 1
+# Because of sponsored restaurants, total list of restaurant is ether 36 or 37, refresh pages until we get a list of 37 restaurant.
+while (a != 37){
+  city_url <- "https://www.tripadvisor.com/Restaurants-g60763-New_York_City_New_York.html" 
+  city <- read_html(city_url)
 
-link <- city %>%
-  html_nodes("a._15_ydu6b") %>%
-  html_attr("href")
+  link <- city %>%
+    html_nodes("a._15_ydu6b") %>%
+    html_attr("href")
+  a = length(link)
+}
+sponsored <- c(1,7,13,19,25,31,37)
+not.sponsored <- c(1:37)
+not.sponsored <- not.sponsored[which(!not.sponsored %in% sponsored)]
 
-names <- list %>%
+link <- link[not.sponsored]
+
+names <- link %>%
   strsplit("-")
 names <- sapply(names,function(x) x[5])
 
-about.restaurant <- link <- city %>%
+
+about.restaurant <- city %>%
   html_nodes("span._1p0FLy4t") %>%
   html_text()
 
-reviews <- about.restaurant[str_detect(about.restaurant,"reviews")]
+#  cant get reviews to align
+# reivews <- city %>%
+#   html_nodes("span.w726Ki5B") %>%
+#   html_text() 
 
 price.range <- about.restaurant[str_detect(about.restaurant,"\\$")]
+price.range <- price.range[not.sponsored]
+
 price.range <- price.range %>%
-  str_replace("\\$\\$\\$\\$","high") %>%
-  str_replace("\\$\\$ - \\$\\$\\$","medium") %>%
-  str_replace("\\$","low")
+ str_replace("\\$\\$\\$\\$","high") %>%
+ str_replace("\\$\\$ - \\$\\$\\$","medium") %>%
+ str_replace("\\$","low")
+
+pages <- city %>%
+  html_nodes("a.pageNum.taLnk") %>%
+  html_attr("data-page-number") %>%
+  as.numeric() %>%
+  max()
+city.temp <- city
+for(i in 1:(pages-1)){
+  a = 1
+  while (a != 37){
+    next_URL <- city.temp %>%
+        html_nodes(".nav.next") %>%
+        html_attr("href")
+    next_URL <- paste0("https://www.tripadvisor.com", next_URL)
+  
+    city.temp <- read_html(next_URL)
+  
+    link.temp <- city.temp %>%
+      html_nodes("a._15_ydu6b") %>%
+      html_attr("href")
+    
+    a = length(link.temp)
+}
+ 
+  link.temp <- link.temp[not.sponsored]
+  
+  link <- append(link,link.temp)
+  
+  names.temp <- link.temp %>%
+    strsplit("-")
+  names.temp <- sapply(names.temp,function(x) x[5])
+  names <- append(names,names.temp)
+  
+  about.restaurant.temp <- city.temp %>%
+    html_nodes("span._1p0FLy4t") %>%
+    html_text()
+  
+  #reviews.temp <- about.restaurant.temp[str_detect(about.restaurant.temp,"reviews")]
+  price.range.temp <- about.restaurant.temp[str_detect(about.restaurant.temp,"\\$")]
+  price.range.temp <- price.range.temp[not.sponsored]
+
+  price.range.temp <- price.range.temp %>%
+    str_replace("\\$\\$\\$\\$","high") %>%
+    str_replace("\\$\\$ - \\$\\$\\$","medium") %>%
+    str_replace("\\$","low")
+
+  price.range <- append(price.range,price.range.temp)
+  
+  #print(paste(i,pages-1))
+  print(paste("link",length(link)))
+  print(paste("names",length(names)))
+  print(paste("price range", length(price.range)))
+}
+
+restaurants <- data.frame(names,link,price.range)
+
 ```
 
-<span class="_1p0FLy4t">$$$$</span>
-<span class="EHA742uW"><span class="_1p0FLy4t">$$$$</span></span>
 
-<div class="wQjYiB7z"><span><a href="/Restaurant_Review-g60763-d5937621-Reviews-Obao-New_York_City_New_York.html" class="_15_ydu6b" target="_blank">5. Obao</a></span></div>
 
-<a href="/Restaurant_Review-g60763-d3263717-Reviews-Obao-New_York_City_New_York.html" class="_15_ydu6b selectorgadget_selected" target="_blank">1. Obao</a>

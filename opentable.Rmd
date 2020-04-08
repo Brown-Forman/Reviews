@@ -26,77 +26,200 @@ library("RColorBrewer")
 ```
 
 ```{r}
-open.table <- function(url){
-  reviews <- read_html(url)
-  total_reviews <- reviews %>%
-  html_nodes('div.oc-reviews-c57b151d') %>%
-  html_text() %>%
-  str_split("What ")
-total_reviews <- total_reviews[[1]][2] %>%
-  str_split("People")
-total_reviews <- as.numeric(total_reviews[[1]][1])
-
-npages <- ceiling(total_reviews/40)
-
-#get body of reviews, this include customer reviews and response from owner
-content <- reviews %>%
-  html_nodes("p") %>%
-  html_text()
-lines.of.menu <- length(content) - 40
-content <- content[(length(content) - 39):length(content)]
-
-
-# get stars that customer give in the review
-star <- reviews %>%
-  html_nodes("span.oc-reviews-e3e61235") %>%
-  html_text()
-star <- t(matrix(as.numeric(star),nrow = 4,ncol=40))
-star.title <- reviews %>%
-  html_nodes("span.oc-reviews-ec85707c") %>%
-  html_text()
-star.title <- unique(star.title)
-colnames(star) <- star.title
-
-#iterate through all pages
-n = 2
-  for (o in 1:(npages-1)){
-    n.character = as.character(n)
-    url.temp1 <- url
-    url.temp2 <- paste0("&page=",n.character)
-    url.temp <- paste0(url.temp1,url.temp2)
-    
-    reviews.temp = read_html(url.temp)
-    
-    content.temp <- reviews.temp %>%
-              html_nodes("p") %>%
-              html_text()
-    a <- length(content.temp) - lines.of.menu - 1
-    content.temp <- content.temp[(length(content.temp) - a):length(content.temp)]
-    content <- append(content,content.temp)
-    
-    star.temp <- reviews.temp %>%
-            html_nodes("span.oc-reviews-e3e61235") %>%
-            html_text()
-    star.temp <- t(matrix(as.numeric(star.temp),nrow = 4,ncol=(length(content.temp))))
-    star.title.temp <- reviews.temp %>%
-            html_nodes("span.oc-reviews-ec85707c") %>%
-            html_text()
-    star.title.temp <- unique(star.title.temp)
-    colnames(star.temp) <- star.title.temp
-    star <- rbind(star,star.temp)
-    n=n+1
-    print(paste(o,'/',(npages-1)))
+# function to separate content of reviews and response from owner
+func_body <- function(body,responded.yn){
+  response = rep(NA,10)
+  content = rep(NA,10)
+  n = length(responded.yn)
+  i = 1
+  a = 1
+  while (a < n){
+    if (responded.yn[a] == FALSE & responded.yn[a+1] == TRUE){
+      content[i] = body[a]
+      response[i] = body[a+1]
+      i = i + 1
+      a = a + 2
+    } else {
+      content[i] = body[a]
+      response[i] = NA
+      i = i + 1
+      a = a + 1
+    }
   }
- #return a dataframe of reviews
-  content = content[!is.na(content)]
-  total_reviews = length(content)
-  df <- data.frame(content) %>%
-    cbind(star)
+  if (responded.yn[n] == FALSE){
+    content[10] = body[n]
+    response[10] = NA
+  }
+  df = data.frame(content,response) %>%
+    mutate(content = as.character(content),
+           response = as.character(response))
   return(df)
 }
 ```
 
+<button data-parameter="page" data-value="3" aria-label="page number 3" class="reviewUpdateParameter oc-reviews-b0c77e5f"><span class="">3</span></button>
+
 ```{r}
-df <- open.table("https://www.opentable.com/r/dish-on-market-louisville?corrid=4ecb1226-44fb-4031-bad2-f1bd432c3377")
+# Read the web page and get the number of reviews
+place <- read_html("https://www.opentable.com/r/the-hub-louisville?corrid=24ab519a-4c87-4083-83f6-4967b0ba620b")
+
+# find the the lnumber of the last page listed in the bottom of the main page
+npages <- place %>% 
+          html_nodes("div") %>% 
+          html_text()
+
+npages <- npages[!is.na(npages)]
+# Get headline of reviews
+headline <- mussel.n.burger %>%
+  html_nodes("span.noQuotes") %>%
+  html_text()
+
+#get body of reviews, this include customer reviews and response from owner
+body <- mussel.n.burger %>%
+  html_nodes("p.partial_entry") %>%
+  html_text()
+
+# get a yes/no vector to see if an element in the body is a response (Yes), otherwise No
+responded.yn <- mussel.n.burger %>%
+    html_nodes("div.mgrRspnInline") %>%
+    html_text()
+responded.yn <-strsplit(responded.yn,'Responded ')
+responded.yn <- sapply(responded.yn,function(x) x[2])
+# tripadvisor was founded in 2000 so this shoud captured all the reviews '20..'
+responded.yn <- str_replace_all(responded.yn,'20..','qwertyuiop') 
+responded.yn <- str_split(responded.yn,'qwertyuiop')
+responded.yn <- sapply(responded.yn,function(x) x[2])
+responded.yn <- body %in% responded.yn
+
+# get a dataframe of 2 columns: reviews and response, if owner did not response: NA
+df <- func_body(body,responded.yn)
+response <- df$response
+content <- df$content
+
+# get stars that customer give in the review
+star <- mussel.n.burger %>%
+  html_nodes("span.ui_bubble_rating") %>%
+  html_attr("alt") 
+star <- star[!is.na(star)]
+star <- star[3:length(star)]
+star <- strsplit(star, " ")
+star <- as.numeric(lapply(star, `[[`, 1))
+
+# count total headlines/reviews total
+l_headline = length(headline)
+length_df1 = data.frame(l_headline)
+
+# iterate to the next page until all reviews are captured
+n = 10
+for (o in 1:(npages-1)){
+  n.character = as.character(n)
+  url = paste0("https://www.tripadvisor.com/Restaurant_Review-g39604-d9799396-Reviews",
+               '-or',n.character,"-Mussel_Burger_Bar_Downtown-Louisville_Kentucky.html")
+  reviews = read_html(url)
+  
+  headline.temp = reviews %>%
+    html_nodes("span.noQuotes") %>%
+    html_text()
+  headline = append(headline,headline.temp)
+  
+  # body including reviews and response from owner, need to look at responded.yn.temp to distinguish between review and response
+  body.temp <- reviews %>%
+  html_nodes(".entry .partial_entry") %>%
+  html_text()
+  
+  # Owner responded yes or no
+  responded.yn.temp <- reviews %>%
+    html_nodes("div.mgrRspnInline") %>%
+    html_text()
+  responded.yn.temp <- strsplit(responded.yn.temp,"Responded ")
+  responded.yn.temp <- sapply(responded.yn.temp,function(x) x[2])
+  responded.yn.temp <- str_replace_all(responded.yn.temp,', 20..',"qwertyuiop")
+  responded.yn.temp <- strsplit(responded.yn.temp,'qwertyuiop')
+  responded.yn.temp <- sapply(responded.yn.temp,function(x) x[2])
+  responded.yn.temp <- body.temp %in% responded.yn.temp 
+  
+  df.temp <- func_body(body.temp,responded.yn.temp)
+ 
+  content.temp = df.temp$content
+  content = append(content,content.temp)
+  
+  response.temp = df.temp$response
+  response = append(response,response.temp)
+  
+  star.temp <- reviews %>%
+    html_nodes("span.ui_bubble_rating") %>%
+    html_attr("alt") 
+  star.temp <- star.temp[!is.na(star.temp)]
+  star.temp <- star.temp[3:length(star.temp)]
+  star.temp <- strsplit(star.temp, " ")
+  star.temp <- as.numeric(lapply(star.temp, `[[`, 1))
+  star <- append(star,star.temp)
+  n = n + 10
+  print(o)
+  l_headline = length(headline.temp)
+  print(l_headline)
+  
+  length_df.temp = data.frame(l_headline)
+  length_df1 = rbind(length_df1,length_df.temp)
+}
+
+#return a dataframe of reviews
+content = content[!is.na(content)]
+total_reviews = length(headline)
+response = response[1:total_reviews]
+star = star[1:total_reviews]
+df = data.frame(headline,content,response,star)
+write_csv(df,"mussel.n.burger.csv")
+  
+```
+
+```{r}
+# Function to get word cloud
+cloud <- function(string_content,filter_words){
+  docs0 <- Corpus(VectorSource(string_content))
+  inspect(docs0)
+  toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+  
+  docs <- tm_map(docs0, toSpace, "/")
+  docs <- tm_map(docs, toSpace, "@")
+  docs <- tm_map(docs, toSpace, "\\|")
+  
+  # Convert the text to lower case
+  docs <- tm_map(docs, content_transformer(tolower))
+  # Remove numbers
+  docs <- tm_map(docs, removeNumbers)
+  # Remove english common stopwords
+  docs <- tm_map(docs, removeWords, stopwords("english"))
+  # Remove your own stop word
+  # specify your stopwords as a character vector
+  docs <- tm_map(docs, removeWords, filter_words) 
+  # Remove punctuations
+  docs <- tm_map(docs, removePunctuation)
+  # Eliminate extra white spaces
+  docs <- tm_map(docs, stripWhitespace)
+  # Text stemming
+  # docs <- tm_map(docs, stemDocument)
+  
+  dtm <- TermDocumentMatrix(docs)
+  m <- as.matrix(dtm)
+  v <- sort(rowSums(m),decreasing=TRUE)
+  d <- data.frame(word = names(v),freq=v)
+  head(d, 10)
+  
+  set.seed(1234)
+  wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+            max.words=200, random.order=FALSE, rot.per=0.35, 
+            colors=brewer.pal(8, "Dark2"))
+}
+```
+
+```{r}
+string_content <- paste(content,collapse = " ")
+filter_words <- c("the","and")
+cloud(string_content,filter_words)
+# bourbon
+bourbon <- content[grepl("bourbon", content)]
+filter_words <- c("the","and","bourbon")
+cloud(bourbon,filter_words)
 ```
 
