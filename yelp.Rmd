@@ -20,22 +20,6 @@ token <- content(res)$access_token
 ```
 
 ```{r}
-yelp <- "https://api.yelp.com"
-term <- "bourbon"
-location <- "Louisville, KY"
-categories <- NULL
-limit <- 50
-radius <- 8800
-url <- modify_url(yelp, path = c("v3", "businesses", "search"),
-                  query = list(term = term, location = location, 
-                               limit = limit,
-                               radius = radius))
-res <- GET(url, add_headers('Authorization' = paste("bearer", client_secret)))
-
-results <- content(res)
-```
-
-```{r}
 yelp_httr_parse <- function(x) {
 
   parse_list <- list(id = x$id, 
@@ -47,7 +31,9 @@ yelp_httr_parse <- function(x) {
                      address1 = x$location$address1, 
                      city = x$location$city, 
                      state = x$location$state, 
-                     distance = x$distance)
+                     distance = x$distance,
+                     price = x$price,
+                     categories = x$categories)
   
   parse_list <- lapply(parse_list, FUN = function(x) ifelse(is.null(x), "", x))
   
@@ -60,12 +46,52 @@ yelp_httr_parse <- function(x) {
                    address1 = parse_list$address1, 
                    city = parse_list$city, 
                    state = parse_list$state, 
-                   distance= parse_list$distance)
+                   distance= parse_list$distance,
+                   price=parse_list$price,
+                   categories=parse_list$categories)
   df
 }
-
-results_list <- lapply(results$businesses, FUN = yelp_httr_parse)
-
-business_data <- do.call("rbind", results_list)
 ```
+
+Make an empty dataframe
+```{r}
+df2 <- data.frame(matrix(ncol= 12, nrow = 0))
+```
+
+```{r}
+yelp <- "https://api.yelp.com"
+terms <- "Restaurants"
+zipcodes <- c(40201:40299)
+
+limit <- 50
+radius <- 8800
+
+for (zip in zipcodes){
+  location <- paste0("Louisville, KY ",zip)
+  print(paste(zip))
+
+for(i in 1:20){
+  offset = i
+  url <- modify_url(yelp, path = c("v3", "businesses", "search"),
+                  query = list(term = term, location = location, 
+                               limit = limit,
+                               radius = radius,
+                               offset = offset))
+  res <- GET(url, add_headers('Authorization' = paste("bearer", client_secret)))
+
+  results <- content(res)
+  results_list <- lapply(results$businesses, FUN = yelp_httr_parse)
+
+  business_data <- do.call("rbind", results_list)
+  df2 <- rbind(business_data,df2)
+}
+}
+```
+
+```{r}
+unique(df2$id)
+```
+
+
+
 
